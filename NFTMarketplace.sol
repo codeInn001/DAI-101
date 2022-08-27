@@ -16,19 +16,20 @@ contract NFTMarketplace is IERC721Receiver  {
         bool sold;
         bool forSale;
         bool flagged;
-        uint rating;
+        uint avgRating;
+        uint numOfRaters;
+        uint totalRating;
     }
 
     mapping(uint256 => AfricaPrint) public africaPrints;
-    address  ownerAddress;
-
+    address  public ownerAddress;
 
     constructor() {
         ownerAddress = msg.sender;
     }
 
-    modifier onlyOwner {
-        require(msg.sender == ownerAddress, "Only the contract owner can perform this action");
+    modifier onlySeller(uint _index) {
+        require(msg.sender == africaPrints[_index].seller, "Only the contract owner can perform this action");
         _;
     }
 
@@ -51,11 +52,14 @@ contract NFTMarketplace is IERC721Receiver  {
             false,
             true,
             false,
-        // DEFAULT RATING OVER 5
-            3
+        // Rating
+            0,
+            0,
+            0
         );
         africaPrintCount++;
     }
+
     // this function will facilitate the buying of a africaprint nft when called
     function buyAfricaPrint(uint256 _index) external payable notFlagged(_index) {
         AfricaPrint storage africaPrint = africaPrints[_index];
@@ -78,32 +82,46 @@ contract NFTMarketplace is IERC721Receiver  {
         require(africaPrint.nft.ownerOf(africaPrint.tokenId) == msg.sender, "Transfer of NFT to buyer failed");
     }
 
-
     // this function will get a africaprint listing from the mapping list
     function getAfricaPrint(uint256 _index) public view returns (AfricaPrint memory) {
         return africaPrints[_index];
     }
 
+    //Function using which the platform owner can flag a africa print
+    function toggleFlag(uint256 _index) public {
+        require(msg.sender == ownerAddress,"Only the owner can access this function");
+        africaPrints[_index].flagged = !africaPrints[_index].flagged;
+    }
 
     // this function will set the africaprint listing to not for sale and only the owner can do that
-    function toggleForSale(uint256 _index) public notFlagged(_index) {
-        AfricaPrint storage africaPrint = africaPrints[_index];
-        require(msg.sender != address(0), "Invalid caller");
-        require(africaPrint.seller == msg.sender, "Only the owner can perform this action");
-
+    function toggleForSale(uint256 _index) public notFlagged(_index) onlySeller(_index) {
         // if token's forSale is false make it true and vice versa
-        africaPrint.forSale = !africaPrint.forSale;
+        africaPrints[_index].forSale = !africaPrints[_index].forSale;
     }
+
+    function rateAfricaPrint(uint256 _index, uint256 _rating) public notFlagged(_index){
+        AfricaPrint memory africaPrint = africaPrints[_index];
+
+        africaPrint.totalRating += _rating;
+        africaPrint.numOfRaters++;
+
+        africaPrint.avgRating = africaPrint.totalRating / africaPrint.numOfRaters;
+    }
+
     // this function will facilitate the changing of the price of a africaprint by the owner
     function modifyAfricaPrintPrice(uint256 _africaPrintPrice, uint256 _index)
     public
     notFlagged(_index)
+    onlySeller(_index)
     payable
     {
-        require(
-            africaPrints[_index].seller == msg.sender,
-            "NFTMarketplace: Can't perform transaction"
-        );
         require(_africaPrintPrice > 0, "Enter a valid new price");
         africaPrints[_index].price = _africaPrintPrice;
     }
+
+    //Override function
+    function onERC721Received( address operator, address from, uint256 tokenId, bytes calldata data ) public override returns (bytes4) {
+        return this.onERC721Received.selector;
+    }
+    
+}
